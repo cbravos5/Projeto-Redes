@@ -3,6 +3,158 @@
 
 #define enquadramento 126
 
+//estrutura que define um tratador de sinal
+struct sigaction action ;
+
+//estrutura de inicialização to timer
+struct itimerval default_timer ;
+
+struct itimerval zero_timer ;
+
+short int time_out = 0;
+
+void init_timer()
+{
+	setitimer (ITIMER_REAL, &default_timer, 0);
+}
+
+void reset_timer()
+{
+	setitimer (ITIMER_REAL, &default_timer, 0);
+}
+
+void stop_timer()
+{
+	setitimer (ITIMER_REAL, &zero_timer, 0);
+}
+
+void time_out_handler(int signal)
+{
+	time_out = 1;
+}
+
+void init_time_handler()
+{
+	//act handler
+	action.sa_handler = time_out_handler;
+	sigemptyset (&action.sa_mask) ;
+	action.sa_flags = 0 ;
+	sigaction (SIGALRM, &action, 0);
+
+	//tick set
+	default_timer.it_value.tv_usec = 0;      // primeiro disparo, em micro-segundos
+	default_timer.it_value.tv_sec  = 2;      	 	// primeiro disparo, em segundos
+	default_timer.it_interval.tv_usec = 0;   // disparos subsequentes, em micro-segundos
+	default_timer.it_interval.tv_sec  = 2;   	 	// disparos subsequentes, em segundos
+
+	zero_timer.it_value.tv_usec = 0;      // primeiro disparo, em micro-segundos
+	zero_timer.it_value.tv_sec  = 0;      	 	// primeiro disparo, em segundos
+	zero_timer.it_interval.tv_usec = 0;   // disparos subsequentes, em micro-segundos
+	zero_timer.it_interval.tv_sec  = 0;   	 	// disparos subsequentes, em segundos
+	setitimer (ITIMER_REAL, &zero_timer, 0);
+}
+
+void print_data(unsigned char *data, int tam, short int param, int *n_line)
+{
+  for (int i = 0; i < tam; ++i)
+  {
+    printf("%c",(char)data[i]);
+    if (!param)
+      if(data[i] == '\n')
+      {  
+        *n_line += 1;
+        printf("%d      ",*n_line);
+      }
+  }
+}
+
+void print_data_default(int *seq_send,int *seq_recv,int sckt, unsigned char *recv,unsigned char *send,
+						 unsigned char *data, short int param1, short int param2, int *n_line, char* data_type)
+{
+	int n,tam,seq,type;
+	init_timer();
+	while(1)//leitura e envio de resposta para o servidor
+  	{
+	    n = read(sckt,recv,19);
+	    if (n < 0)
+	    {
+	      printf("ERROR reading from socket");
+	      return;
+	    }
+	    if (read_env(recv,&tam,data,&seq,&type) == -1)//send nack
+	    {
+	      send_nack(seq_send,sckt);
+	      seq_check(seq_send);
+	      reset_timer();
+	    }
+	    else if (type_check(data_type,type,*seq_recv,seq))//ack
+	    {
+	      seq_check(seq_recv);
+	      send_ack(seq_send,sckt);
+	      seq_check(seq_send);
+	      print_data(data,tam,param1,n_line);
+	      reset_timer();
+	      if(param2) printf("  ");
+	    }
+	    else if(type_check("end",type,*seq_recv,seq))//fim transmissao
+	    {
+	      seq_check(seq_recv);
+	      send_ack(seq_send,sckt);
+	      seq_check(seq_send);
+	      stop_timer();
+	      break;
+	    }
+	    if(time_out) {write(sckt, send, 19); time_out = 0;}
+	}
+}
+
+void send_final_data(int *seq_send,int *seq_recv,int sckt, unsigned char *recv, unsigned char *send)
+{
+  int n,type,seq,tam;
+  send = make_env((unsigned char)13,NULL,*seq_send,send);
+  n = write(sckt, send, 19);
+  if(n < 0)
+  {
+    printf("ERRO AO ENVIAR MENSAGEM\n");
+    return;
+  }
+  seq_check(seq_send);
+  //esperar pela mensgaem de confirmacao
+  init_timer();
+  while(1)
+    {
+      n = read(sckt,recv,19);
+      if (n < 0)
+      {
+        printf("ERROR reading from socket");
+        return;
+      }
+      if (read_env(recv,&tam,NULL,&seq,&type) == -1)
+      {
+        seq_check(seq_recv);
+        printf("ERRO AO DESENVELOPAR MENSAGEM\n");
+        return;
+      }
+      else if(type_check("NACK",type,*seq_recv,seq))
+      {
+        seq_check(seq_recv);
+        n = write(sckt, send, 19);
+        reset_timer();
+        if(n < 0)
+        {
+        printf("ERRO AO ENVIAR MENSAGEM\n");
+          return;
+        }
+      }
+      else if(type_check("ACK",type,*seq_recv,seq))
+      {
+        seq_check(seq_recv);
+        stop_timer();
+        break;
+      }
+      if(time_out) {write(sckt, send, 19); time_out = 0;}
+    }
+}
 
 void clear_data(unsigned char * data)
 {

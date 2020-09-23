@@ -8,6 +8,7 @@
 int n_line = 1;
 int seq_send_c = 0;
 int seq_recv_c = 0;
+extern short int time_out;
 
 ////////////////////////////////////////////////////////////////////////
 int get_text(unsigned char *data, char *text, int k)
@@ -22,21 +23,6 @@ int get_text(unsigned char *data, char *text, int k)
     j++;
   }
   return 1;
-}
-
-////////////////////////////////////////////////////////////////////////
-
-void print_data(unsigned char *data, int tam)
-{
-  for (int i = 0; i < tam; ++i)
-  {
-    printf("%c",(char)data[i]);
-    if(data[i] == '\n')
-    {  
-      n_line++;
-      printf("%d      ",n_line);
-    }
-  }
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -61,6 +47,7 @@ void cd(int sckt, unsigned char *send, unsigned char *data, unsigned char *recv)
 
   seq_check(&seq_send_c);
   
+  init_timer();
   while(1)
   { 
     n = read(sckt,recv,19);
@@ -80,6 +67,7 @@ void cd(int sckt, unsigned char *send, unsigned char *data, unsigned char *recv)
         printf("ERRO AO ENVIAR MENSAGEM\n");
         return;
       }
+      reset_timer();
     }
     else if (type_check("erro",type,seq_recv_c,seq)) //erro
     {
@@ -92,6 +80,7 @@ void cd(int sckt, unsigned char *send, unsigned char *data, unsigned char *recv)
       seq_check(&seq_recv_c);
       break;
     }
+    if(time_out) {write(sckt, send, 19); time_out = 0;}
   }
 } 
 
@@ -111,6 +100,7 @@ void ls(int sckt, unsigned char *send,unsigned char *data , unsigned char *recv)
 
   seq_check(&seq_send_c);
   
+  init_timer();
   while(1)//Le enquanto nao recebe uma confirmacao, nack ou erro
   {
     n = read(sckt,recv,19);
@@ -123,11 +113,13 @@ void ls(int sckt, unsigned char *send,unsigned char *data , unsigned char *recv)
     {
       send_nack(&seq_send_c,sckt);
       seq_check(&seq_send_c);
+      reset_timer();
     }
     else if(type_check("NACK",type,seq_recv_c,seq)) //NACK
     {
       seq_check(&seq_recv_c);
       n = write(sckt, send, 19);
+      reset_timer();
       if(n < 0)
       {
         printf("ERRO AO ENVIAR MENSAGEM\n");
@@ -145,42 +137,16 @@ void ls(int sckt, unsigned char *send,unsigned char *data , unsigned char *recv)
       seq_check(&seq_recv_c);
       send_ack(&seq_send_c,sckt);
       seq_check(&seq_send_c);
-      print_data(data,tam);
+      print_data(data,tam,1,NULL);
       printf("  ");
+      stop_timer();
       break;
     }
+    if(time_out) {write(sckt, send, 19); time_out = 0;}
   }
 
   
-  while(1)
-  {
-    n = read(sckt,recv,19);
-    if (n < 0)
-    {
-      printf("ERROR reading from socket");
-      return;
-    }
-    if (read_env(recv,&tam,data,&seq,&type) == -1)//send nack
-    {
-      send_nack(&seq_send_c,sckt);
-      seq_check(&seq_send_c);
-    }
-    else if (type_check("ls_data",type,seq_recv_c,seq))//ack
-    {
-      seq_check(&seq_recv_c);
-      send_ack(&seq_send_c,sckt);
-      seq_check(&seq_send_c);
-      print_data(data,tam);
-      printf("  ");
-    }
-    else if(type_check("end",type,seq_recv_c,seq))//fim transmissao
-    {
-      seq_check(&seq_recv_c);
-      send_ack(&seq_send_c,sckt);
-      seq_check(&seq_send_c);
-      break;
-    }
-  }
+  print_data_default(&seq_send_c,&seq_recv_c,sckt,recv,send,data,1,1,NULL,"ls_data");
   printf("\n");
 } 
 
@@ -239,7 +205,7 @@ void ver(int sckt, unsigned char *send,unsigned char *data , unsigned char *recv
   }
   seq_check(&seq_send_c);
 
-
+  init_timer();
   while(1)//Le enquanto nao recebe uma confirmacao, nack ou erro
   {
     n = read(sckt,recv,19);
@@ -252,11 +218,13 @@ void ver(int sckt, unsigned char *send,unsigned char *data , unsigned char *recv
     {
       send_nack(&seq_send_c,sckt);
       seq_check(&seq_send_c);
+      reset_timer();
     }
     else if(type_check("NACK",type,seq_recv_c,seq)) //NACK
     {
       seq_check(&seq_recv_c);
       n = write(sckt, send, 19);
+      reset_timer();
       if(n < 0)
       {
         printf("ERRO AO ENVIAR MENSAGEM\n");
@@ -275,39 +243,14 @@ void ver(int sckt, unsigned char *send,unsigned char *data , unsigned char *recv
       seq_check(&seq_recv_c);
       send_ack(&seq_send_c,sckt);
       seq_check(&seq_send_c);
-      print_data(data,tam);
+      print_data(data,tam,0,&n_line);
+      stop_timer();
       break;
     }
+    if(time_out) {write(sckt, send, 19); time_out = 0;}
   }
 
-  while(1)//leitura e envio de resposta para o servidor
-  {
-    n = read(sckt,recv,19);
-    if (n < 0)
-    {
-      printf("ERROR reading from socket");
-      return;
-    }
-    if (read_env(recv,&tam,data,&seq,&type) == -1)//send nack
-    {
-      send_nack(&seq_send_c,sckt);
-      seq_check(&seq_send_c);
-    }
-    else if (type_check("arch_data",type,seq_recv_c,seq))//ack
-    {
-      seq_check(&seq_recv_c);
-      send_ack(&seq_send_c,sckt);
-      seq_check(&seq_send_c);
-      print_data(data,tam);
-    }
-    else if(type_check("end",type,seq_recv_c,seq))//fim transmissao
-    {
-      seq_check(&seq_recv_c);
-      send_ack(&seq_send_c,sckt);
-      seq_check(&seq_send_c);
-      break;
-    }
-  }
+  print_data_default(&seq_send_c,&seq_recv_c,sckt,recv,send,data,0,0,&n_line,"arch_data");
   n_line = 1;
   printf("\n");
 } 
@@ -343,6 +286,7 @@ void edit(int sckt, unsigned char *send,unsigned char *data , unsigned char *rec
   }
   seq_check(&seq_send_c);
 
+  init_timer();
   while(1)//Le enquanto nao recebe uma confirmacao, nack ou erro
   {
     n = read(sckt,recv,19);
@@ -355,11 +299,13 @@ void edit(int sckt, unsigned char *send,unsigned char *data , unsigned char *rec
     {
       send_nack(&seq_send_c,sckt);
       seq_check(&seq_send_c);
+      reset_timer();
     }
     else if(type_check("NACK",type,seq_recv_c,seq)) //NACK
     {
       seq_check(&seq_recv_c);
       n = write(sckt, send, 19);
+      reset_timer();
       if(n < 0)
       {
         printf("ERRO AO ENVIAR MENSAGEM\n");
@@ -375,8 +321,10 @@ void edit(int sckt, unsigned char *send,unsigned char *data , unsigned char *rec
     else if (type_check("ACK",type,seq_recv_c,seq))//ACK
     { 
       seq_check(&seq_recv_c);
+      stop_timer();
       break;
     }
+    if(time_out) {write(sckt, send, 19); time_out = 0;}
   }
 
   //envia linha
@@ -390,6 +338,7 @@ void edit(int sckt, unsigned char *send,unsigned char *data , unsigned char *rec
   }
   seq_check(&seq_send_c);
 
+  init_timer();
   while(1)//Le enquanto nao recebe uma confirmacao, nack ou erro
   {
     n = read(sckt,recv,19);
@@ -402,11 +351,13 @@ void edit(int sckt, unsigned char *send,unsigned char *data , unsigned char *rec
     {
       send_nack(&seq_send_c,sckt);
       seq_check(&seq_send_c);
+      reset_timer();
     }
     else if(type_check("NACK",type,seq_recv_c,seq)) //NACK
     {
       seq_check(&seq_recv_c);
       n = write(sckt, send, 19);
+      reset_timer();
       if(n < 0)
       {
         printf("ERRO AO ENVIAR MENSAGEM\n");
@@ -422,8 +373,10 @@ void edit(int sckt, unsigned char *send,unsigned char *data , unsigned char *rec
     else if (type_check("ACK",type,seq_recv_c,seq))//ACK
     { 
       seq_check(&seq_recv_c);
+      stop_timer();
       break;
     }
+    if(time_out) {write(sckt, send, 19); time_out = 0;}
   }
 
   k = 0;
@@ -441,6 +394,7 @@ void edit(int sckt, unsigned char *send,unsigned char *data , unsigned char *rec
       return;
     }
     seq_check(&seq_send_c);
+    init_timer();
     //loop de espera de resposta do server
     while(1)
     {
@@ -460,6 +414,7 @@ void edit(int sckt, unsigned char *send,unsigned char *data , unsigned char *rec
       {
         seq_check(&seq_recv_c);
         n = write(sckt, send, 19);
+        reset_timer();
         if(n < 0)
         {
           printf("ERRO AO ENVIAR MENSAGEM\n");
@@ -469,51 +424,15 @@ void edit(int sckt, unsigned char *send,unsigned char *data , unsigned char *rec
       else if(type_check("ACK",type,seq_recv_c,seq))
       {
         seq_check(&seq_recv_c);
+        stop_timer();
         break;
       }
+      if(time_out) {write(sckt, send, 19); time_out = 0;}
     }
   }
  
   //enviar final de dados
-  send = make_env((unsigned char)13,NULL,seq_send_c,send);
-  n = write(sckt, send, 19);
-  if(n < 0)
-  {
-    printf("ERRO AO ENVIAR MENSAGEM\n");
-    return;
-  }
-  seq_check(&seq_send_c);
-  //esperar pela mensagem de confirmacao
-  while(1)
-  {
-    n = read(sckt,recv,19);
-    if (n < 0)
-    {
-      printf("ERROR reading from socket");
-      return;
-    }
-    if (read_env(recv,&tam,NULL,&seq,&type) == -1)
-    {
-      seq_check(&seq_recv_c);
-      printf("ERRO AO DESENVELOPAR MENSAGEM\n");
-      return;
-    }
-    else if(type_check("NACK",type,seq_recv_c,seq))
-    {
-      seq_check(&seq_recv_c);
-      n = write(sckt, send, 19);
-      if(n < 0)
-      {
-        printf("ERRO AO ENVIAR MENSAGEM\n");
-        return;
-      }
-    }
-    else if(type_check("ACK",type,seq_recv_c,seq))
-    {
-      seq_check(&seq_recv_c);
-      break;
-    }
-  } 
+  send_final_data(&seq_send_c,&seq_recv_c,sckt,recv,send);
 }
 
 void linha(int sckt, unsigned char *send,unsigned char *data , unsigned char *recv)
@@ -533,6 +452,7 @@ void linha(int sckt, unsigned char *send,unsigned char *data , unsigned char *re
   }
   seq_check(&seq_send_c);
 
+  init_timer();
   while(1)//Le enquanto nao recebe uma confirmacao, nack ou erro
   {
     n = read(sckt,recv,19);
@@ -545,11 +465,13 @@ void linha(int sckt, unsigned char *send,unsigned char *data , unsigned char *re
     {
       send_nack(&seq_send_c,sckt);
       seq_check(&seq_send_c);
+      reset_timer();
     }
     else if(type_check("NACK",type,seq_recv_c,seq)) //NACK
     {
       seq_check(&seq_recv_c);
       n = write(sckt, send, 19);
+      reset_timer();
       if(n < 0)
       {
         printf("ERRO AO ENVIAR MENSAGEM\n");
@@ -565,6 +487,7 @@ void linha(int sckt, unsigned char *send,unsigned char *data , unsigned char *re
     else if (type_check("ACK",type,seq_recv_c,seq))//ACK
     { 
       seq_check(&seq_recv_c);
+      stop_timer();
       break;
     }
   }
@@ -580,6 +503,7 @@ void linha(int sckt, unsigned char *send,unsigned char *data , unsigned char *re
   }
   seq_check(&seq_send_c);
 
+  init_timer();
   while(1)//Le enquanto nao recebe uma confirmacao ou nack
   {
     n = read(sckt,recv,19);
@@ -592,11 +516,13 @@ void linha(int sckt, unsigned char *send,unsigned char *data , unsigned char *re
     {
       send_nack(&seq_send_c,sckt);
       seq_check(&seq_send_c);
+      reset_timer();
     }
     else if(type_check("NACK",type,seq_recv_c,seq)) //NACK
     {
       seq_check(&seq_recv_c);
       n = write(sckt, send, 19);
+      reset_timer();
       if(n < 0)
       {
         printf("ERRO AO ENVIAR MENSAGEM\n");
@@ -608,43 +534,16 @@ void linha(int sckt, unsigned char *send,unsigned char *data , unsigned char *re
       seq_check(&seq_recv_c);
       send_ack(&seq_send_c,sckt);
       seq_check(&seq_send_c);
+      stop_timer();
       break;
     }
+    if(time_out) {write(sckt, send, 19); time_out = 0;}
   }
 
   if(tam == 0)
     return;
-  printf("%s",(char *)data);
-
-
-  while(1)//leitura e envio de resposta para o servidor
-  {
-    n = read(sckt,recv,19);
-    if (n < 0)
-    {
-      printf("ERROR reading from socket");
-      return;
-    }
-    if (read_env(recv,&tam,data,&seq,&type) == -1)//send nack
-    {
-      send_nack(&seq_send_c,sckt);
-      seq_check(&seq_send_c);
-    }
-    else if (type_check("arch_data",type,seq_recv_c,seq))//ack
-    {
-      seq_check(&seq_recv_c);
-      send_ack(&seq_send_c,sckt);
-      seq_check(&seq_send_c);
-      printf("%s",(char *)data);
-    }
-    else if(type_check("end",type,seq_recv_c,seq))//fim transmissao
-    {
-      seq_check(&seq_recv_c);
-      send_ack(&seq_send_c,sckt);
-      seq_check(&seq_send_c);
-      break;
-    }
-  }
+  print_data(data,tam,1,&n_line);
+  print_data_default(&seq_send_c,&seq_recv_c,sckt,recv,send,data,1,0,NULL,"arch_data");
 }
 
 void linhas(int sckt, unsigned char *send,unsigned char *data , unsigned char *recv)
@@ -664,6 +563,7 @@ void linhas(int sckt, unsigned char *send,unsigned char *data , unsigned char *r
   }
   seq_check(&seq_send_c);
  
+  init_timer();
   while(1)//Le enquanto nao recebe uma confirmacao, nack ou erro
   {
     n = read(sckt,recv,19);
@@ -676,11 +576,13 @@ void linhas(int sckt, unsigned char *send,unsigned char *data , unsigned char *r
     {
       send_nack(&seq_send_c,sckt);
       seq_check(&seq_send_c);
+      reset_timer();
     }
     else if(type_check("NACK",type,seq_recv_c,seq)) //NACK
     {
       seq_check(&seq_recv_c);
       n = write(sckt, send, 19);
+      reset_timer();
       if(n < 0)
       {
         printf("ERRO AO ENVIAR MENSAGEM\n");
@@ -696,8 +598,10 @@ void linhas(int sckt, unsigned char *send,unsigned char *data , unsigned char *r
     else if (type_check("ACK",type,seq_recv_c,seq))//ACK
     { 
       seq_check(&seq_recv_c);
+      stop_timer();
       break;
     }
+    if(time_out) {write(sckt, send, 19); time_out = 0;}
   }
 
   //envia linha
@@ -714,6 +618,7 @@ void linhas(int sckt, unsigned char *send,unsigned char *data , unsigned char *r
   }
   seq_check(&seq_send_c);
 
+  init_timer();
   while(1)//Le enquanto nao recebe uma confirmacao ou nack
   {
     n = read(sckt,recv,19);
@@ -726,11 +631,13 @@ void linhas(int sckt, unsigned char *send,unsigned char *data , unsigned char *r
     {
       send_nack(&seq_send_c,sckt);
       seq_check(&seq_send_c);
+      reset_timer();
     }
     else if(type_check("NACK",type,seq_recv_c,seq)) //NACK
     {
       seq_check(&seq_recv_c);
       n = write(sckt, send, 19);
+      reset_timer();
       if(n < 0)
       {
         printf("ERRO AO ENVIAR MENSAGEM\n");
@@ -742,45 +649,18 @@ void linhas(int sckt, unsigned char *send,unsigned char *data , unsigned char *r
       seq_check(&seq_recv_c);
       send_ack(&seq_send_c,sckt);
       seq_check(&seq_send_c);
+      stop_timer();
       break;
     }
+    if(time_out) {write(sckt, send, 19); time_out = 0;}
   }
 
   if(tam == 0)
     return;
   n_line = atoi(line_start);
   printf("%d      ",n_line);
-  print_data(data,tam);
-
-
-  while(1)//leitura e envio de resposta para o servidor
-  {
-    n = read(sckt,recv,19);
-    if (n < 0)
-    {
-      printf("ERROR reading from socket");
-      return;
-    }
-    if (read_env(recv,&tam,data,&seq,&type) == -1)//send nack
-    {
-      send_nack(&seq_send_c,sckt);
-      seq_check(&seq_send_c);
-    }
-    else if (type_check("arch_data",type,seq_recv_c,seq))//ack
-    {
-      seq_check(&seq_recv_c);
-      send_ack(&seq_send_c,sckt);
-      seq_check(&seq_send_c);
-      print_data(data,tam);
-    }
-    else if(type_check("end",type,seq_recv_c,seq))//fim transmissao
-    {
-      seq_check(&seq_recv_c);
-      send_ack(&seq_send_c,sckt);
-      seq_check(&seq_send_c);
-      break;
-    }
-  }
+  print_data(data,tam,0,&n_line);
+  print_data_default(&seq_send_c,&seq_recv_c,sckt,recv,send,data,0,0,&n_line,"arch_data");
   n_line = 1;
   printf("\n");
 }
@@ -792,9 +672,10 @@ void main(void)
   unsigned char *data = malloc(15);
   int sckt = ConexaoRawSocket("lo");
   char command[6];
-  //int sckt = ConexaoRawSocket("lo");
+  init_time_handler();
   while(1)
   {
+    stop_timer();
     printf("client@terminal---->");
     scanf("%s",command);
     if(strcmp(command,"lcd") == 0) lcd();

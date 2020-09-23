@@ -4,6 +4,26 @@
 #include <errno.h>
 #include <dirent.h>
 #include <stdint.h>
+#include <signal.h>
+#include <sys/time.h>
+
+
+void init_timer();
+
+void reset_timer();
+
+void stop_timer();
+
+void time_out_handler(int signal);
+
+void init_time_handler();
+
+void print_data(unsigned char *data, int tam, short int param, int *n_line);
+
+void print_data_default(int *seq_send,int *seq_recv,int sckt, unsigned char *recv,unsigned char *send,
+						 unsigned char *data, short int param1, short int param2, int *n_line, char* data_type);
+
+void send_final_data(int *seq_send,int *seq_recv,int sckt, unsigned char *recv, unsigned char *send);
 
 void clear_data(unsigned char * data);
 
