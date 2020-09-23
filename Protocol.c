@@ -13,26 +13,36 @@ struct itimerval zero_timer ;
 
 short int time_out = 0;
 
+////////////////////////////////////////////////////////////////////////
+//inicia um temporizador de 2 segundos
 void init_timer()
 {
 	setitimer (ITIMER_REAL, &default_timer, 0);
 }
 
+////////////////////////////////////////////////////////////////////////
+//reseta um temporizador de 2 segundos
 void reset_timer()
 {
 	setitimer (ITIMER_REAL, &default_timer, 0);
 }
 
+////////////////////////////////////////////////////////////////////////
+//para um temporizador 
 void stop_timer()
 {
 	setitimer (ITIMER_REAL, &zero_timer, 0);
 }
 
+////////////////////////////////////////////////////////////////////////
+//indica um time_out
 void time_out_handler(int signal)
 {
 	time_out = 1;
 }
 
+////////////////////////////////////////////////////////////////////////
+//inicia estruturas de time_out
 void init_time_handler()
 {
 	//act handler
@@ -54,6 +64,8 @@ void init_time_handler()
 	setitimer (ITIMER_REAL, &zero_timer, 0);
 }
 
+////////////////////////////////////////////////////////////////////////
+//imprime dados e numero das linhas(caso parametro seja passado)
 void print_data(unsigned char *data, int tam, short int param, int *n_line)
 {
   for (int i = 0; i < tam; ++i)
@@ -68,6 +80,8 @@ void print_data(unsigned char *data, int tam, short int param, int *n_line)
   }
 }
 
+////////////////////////////////////////////////////////////////////////
+//funcao padrao de receber dados do servidor e imprimir na tela
 void print_data_default(int *seq_send,int *seq_recv,int sckt, unsigned char *recv,unsigned char *send,
 						 unsigned char *data, short int param1, short int param2, int *n_line, char* data_type)
 {
@@ -76,11 +90,6 @@ void print_data_default(int *seq_send,int *seq_recv,int sckt, unsigned char *rec
 	while(1)//leitura e envio de resposta para o servidor
   	{
 	    n = read(sckt,recv,19);
-	    if (n < 0)
-	    {
-	      printf("ERROR reading from socket");
-	      return;
-	    }
 	    if (read_env(recv,&tam,data,&seq,&type) == -1)//send nack
 	    {
 	      send_nack(seq_send,sckt);
@@ -108,31 +117,22 @@ void print_data_default(int *seq_send,int *seq_recv,int sckt, unsigned char *rec
 	}
 }
 
+////////////////////////////////////////////////////////////////////////
+//funcao padrão de receber final de dados
 void send_final_data(int *seq_send,int *seq_recv,int sckt, unsigned char *recv, unsigned char *send)
 {
   int n,type,seq,tam;
   send = make_env((unsigned char)13,NULL,*seq_send,send);
   n = write(sckt, send, 19);
-  if(n < 0)
-  {
-    printf("ERRO AO ENVIAR MENSAGEM\n");
-    return;
-  }
   seq_check(seq_send);
   //esperar pela mensgaem de confirmacao
   init_timer();
   while(1)
     {
       n = read(sckt,recv,19);
-      if (n < 0)
-      {
-        printf("ERROR reading from socket");
-        return;
-      }
       if (read_env(recv,&tam,NULL,&seq,&type) == -1)
       {
         seq_check(seq_recv);
-        printf("ERRO AO DESENVELOPAR MENSAGEM\n");
         return;
       }
       else if(type_check("NACK",type,*seq_recv,seq))
@@ -140,11 +140,6 @@ void send_final_data(int *seq_send,int *seq_recv,int sckt, unsigned char *recv, 
         seq_check(seq_recv);
         n = write(sckt, send, 19);
         reset_timer();
-        if(n < 0)
-        {
-        printf("ERRO AO ENVIAR MENSAGEM\n");
-          return;
-        }
       }
       else if(type_check("ACK",type,*seq_recv,seq))
       {
@@ -156,29 +151,15 @@ void send_final_data(int *seq_send,int *seq_recv,int sckt, unsigned char *recv, 
     }
 }
 
+////////////////////////////////////////////////////////////////////////
+//limpa um buffer de dados
 void clear_data(unsigned char * data)
 {
 	for (int i = 0; i < 15; ++i){data[i] = '\0';}
 }
-////////////////////////////////////////////////////////////////////////
-
-uint16_t unpack(uint8_t *data, int tam)
-{
-        uint16_t val;
-        if (tam == 1)
-        {
-        	val = (uint16_t)data[0];
-        }
-        else
-        {
-        	val = (uint16_t)data[0] << 8 |
-            	  (uint16_t)data[1];
-        }
-        return val;
-}
 
 ////////////////////////////////////////////////////////////////////////
-
+//envia um ack
 void send_ack(int *seq, int sckt)
 {
 	int n;
@@ -186,15 +167,10 @@ void send_ack(int *seq, int sckt)
 	msg = make_env((unsigned char)8,NULL,*seq,msg);
 	n = write(sckt, msg, 19);
 	free(msg);
-  	if(n < 0)
-  	{
-    	printf("ERRO AO ENVIAR MENSAGEM\n");
-    	return;
-  	}
 }
 
 ////////////////////////////////////////////////////////////////////////
-
+//envia um nack
 void send_nack(int *seq, int sckt)
 {
 	int n;
@@ -202,15 +178,10 @@ void send_nack(int *seq, int sckt)
 	msg = make_env((unsigned char)9,NULL,*seq,msg);
 	n = write(sckt, msg, 19);
 	free(msg);
-  	if(n < 0)
-  	{
-    	printf("ERRO AO ENVIAR MENSAGEM\n");
-    	return;
-  	}
 }
 
 ////////////////////////////////////////////////////////////////////////
-
+//verificacao de tipo e sequencia
 int type_check(char *check,int type_r,int seq_recv, int seq)
 {
   if(seq != seq_recv)
@@ -236,9 +207,8 @@ int type_check(char *check,int type_r,int seq_recv, int seq)
   return 0;
 }
 
-
 ////////////////////////////////////////////////////////////////////////
-
+//impressao de erro
 void error(unsigned char *data)
 {
   switch ((int)(data[0]-'0'))
@@ -251,7 +221,7 @@ void error(unsigned char *data)
 }
 
 //////////////////////////////////////////////////////////////////////// 
-
+//atualiza sequencia
 void seq_check(int *seq)
 {
   if(*seq == 255)
@@ -261,7 +231,7 @@ void seq_check(int *seq)
 }
 
 ////////////////////////////////////////////////////////////////////////
-
+//cria um envelope de até 19 bytes
 unsigned char * make_env(unsigned char type, unsigned char *data, unsigned char seq, unsigned char *env)
 {
 	unsigned char raw_byte; //byte que recebera 4 bits do tipo e 4 bits do tamanho 
@@ -275,6 +245,7 @@ unsigned char * make_env(unsigned char type, unsigned char *data, unsigned char 
 		tam = strlen(data);
 	else
 		tam = 0; 
+	//coloca 2 inteiros de 4 bits em um byte
 	raw_byte = tam << 4;
 	raw_byte = raw_byte | type;
 
@@ -296,8 +267,8 @@ unsigned char * make_env(unsigned char type, unsigned char *data, unsigned char 
 	return env;
 }
 
-
-//Retorna -1 se houve algum erro, 0 caso contrario
+////////////////////////////////////////////////////////////////////////
+//lê um envelope de até 19 bytes
 int read_env(unsigned char *msg, int *tam, unsigned char *data, int *seq, int *type)
 {
 	unsigned char enq;
