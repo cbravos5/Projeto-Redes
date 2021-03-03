@@ -1,2 +1,2 @@
 # Projeto-Redes
-Implementation of a text editor only with client-server communication in C language
+Text Editor implementation only with client-serve communicaton in C language
